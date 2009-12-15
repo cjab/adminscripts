@@ -1,0 +1,11 @@
+= Admin Scripts
+
+== mkhost
+
+mkhost is a script for creating apache2 virtual hosts. Hosts are configured
+for suexec and php using fcgid.
+
+=== Instructions
+
+Just run the script as a super user. The default paths assume a debian based 
+distro. This can be changed by editing the constants.

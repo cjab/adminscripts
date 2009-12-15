@@ -1,0 +1,135 @@
+#!/usr/bin/python
+
+import stat, sys, os, string, commands
+
+HOST_ROOT = "/var/www"
+SITES_DIR = "/etc/apache2/sites-available"
+
+if os.getuid():
+    print "You must run this script as super user..."
+    sys.exit(1)
+
+name = raw_input("Customer: ")
+domain = raw_input("Domain: ")
+home_dir = HOST_ROOT + "/" + name
+public_html = home_dir + "/public_html"
+fcgi_wrapper = home_dir + "/php.fcgi"
+
+
+create_group = "groupadd %s" % name
+print "Creating group: %s" % name
+status, output = commands.getstatusoutput(create_group)
+if status:
+    print "Could not create group, exiting..."
+    sys.exit(1)
+
+
+create_user = "useradd -d %s -g %s -s /bin/false -m %s" % \
+    (home_dir, name, name)
+print "Creating user: %s" % name
+status, output = commands.getstatusoutput(create_user)
+if status:
+    print "Could not create user, exiting..."
+    sys.exit(1)
+
+
+print "Setting up home directory: %s" % home_dir
+c = "chown %s:%s %s" % (name, name, home_dir)
+status, output = commands.getstatusoutput(c)
+c = "mkdir %s" % public_html
+status, output = commands.getstatusoutput(c)
+c = "chown %s:%s %s" % (name, name, public_html)
+status, output = commands.getstatusoutput(c)
+c = "chmod 2750 %s" % public_html
+status, output = commands.getstatusoutput(c)
+file = open(fcgi_wrapper, "w")
+
+wrapper = \
+"""#!/bin/sh
+PHPRC=""" + home_dir + """
+export PHPRC
+export PHP_FCGI_MAX_REQUESTS=500
+export PHP_FCGI_CHILDREN=4
+exec /usr/bin/php-cgi"""
+
+file.write(wrapper)
+file.close()
+c = "chown %s:%s %s" % (name, name, fcgi_wrapper)
+status, output = commands.getstatusoutput(c)
+c = "chmod 0750 %s" % fcgi_wrapper
+status, output = commands.getstatusoutput(c)
+
+
+print "Setting up site: %s" % name
+if os.path.exists("%s/%s" % (SITES_DIR, name)):
+    print "Site already exists, exiting..."
+    sys.exit(1)
+
+file = open("%s/%s" % (SITES_DIR, name), "w")
+
+config = \
+"""<VirtualHost *:80>
+	ServerName """ + domain + """
+	ServerAlias www.""" + domain + """
+	ServerAdmin support@dinocore.net
+	DocumentRoot """ + public_html + """
+
+	ServerSignature Off
+	CustomLog /var/log/apache2/""" + domain + """-access.log combined
+
+	<IfModule mod_fcgid.c>
+		SuexecUserGroup """ +  "%s %s" % (name, name) + """
+		PHP_Fix_Pathinfo_Enable 1
+		<Directory """ + public_html + """>
+			Options +ExecCGI
+			Options -Indexes
+			AllowOverride All
+			AddHandler fcgid-script .php
+			FCGIWrapper """ + fcgi_wrapper + """ .php
+
+			Order allow,deny
+			allow from all
+		</Directory>
+	</IfModule>
+
+    <IfModule mod_rewrite.c>
+    	RewriteEngine on
+    	RewriteCond %{HTTP_HOST} ^www\.""" + \
+            string.replace(domain, ".", "\.") + """
+    	RewriteRule ^(.*)$ http://""" + domain + """$1 [R=permanent,L]
+    </IfModule>
+
+	# Disallow access to git and svn directories
+	# =======================================================
+	<DirectoryMatch \"^/.*/.(git|svn)/\">
+		Order deny,allow
+		Deny from all
+	</DirectoryMatch>
+
+	<DirectoryMatch \"^/.*/.gitignore\">
+		Order deny,allow
+		Deny from all
+	</DirectoryMatch>
+</VirtualHost>"""
+
+file.write(config)
+file.close()
+
+    
+print ""
+print "Account Details"
+print "==============================="
+print "User: %s" % name
+print "Group: %s" % name
+print "Home: %s" % home_dir
+print "Apache Config: %s/%s" % (SITES_DIR, name)
+print ""
+
+
+enable = raw_input("Enable site now? [Yn]")
+if enable == "Y" or enable == "":
+    status, output = commands.getstatusoutput("a2ensite %s" % name)
+    print output
+    status, output = commands.getstatusoutput("/etc/init.d/apache2 reload")
+    print output
+    print ""
