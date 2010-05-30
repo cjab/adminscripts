@@ -1,0 +1,43 @@
+#!/usr/bin/ruby
+require 'rubygems'
+require 'highline/import'
+require 'net/imap'
+require 'optparse'
+
+options = { :server => 'imap.gmail.com', :port => 993 }
+
+# Define options
+optparse = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [options]"
+
+  opts.on('-u', '--user USERNAME', 'Log in using USERNAME') do |user|
+    options[:username] = user
+  end
+
+  opts.on('-p', '--password PASSWORD', 'Log in using PASSWORD') do |password|
+    options[:password] = password
+  end
+
+  opts.on('-h', '--help', 'Display this screen') do
+    puts opts
+    exit
+  end
+end
+
+optparse.parse!
+
+
+unless options.has_key?(:username)
+  options[:username] = ask('Username: ')
+end
+
+unless options.has_key?(:password)
+  options[:password] = ask('Password: ') { |q| q.echo = '' }
+end
+
+imap = Net::IMAP.new(options[:server], options[:port], true)
+imap.login(options[:username], options[:password])
+imap.select('[Gmail]/All Mail')
+puts imap.search(['ALL']).count
+imap.logout()
+imap.disconnect()

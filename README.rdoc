@@ -9,3 +9,8 @@ for suexec and php using fcgid.
 
 Just run the script as a super user. The default paths assume a debian based 
 distro. This can be changed by editing the constants.
+
+== gmailcount
+
+The GMail web client displays only the total number of threads stored on
+an account. This script will return the total number of messages.
